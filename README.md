@@ -16,6 +16,18 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Configuración de autenticación
+
+Copia `.env.example` a `.env.local` y configura:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: URL del proyecto de Supabase.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: clave pública `anon` de Supabase.
+- `NEXT_PUBLIC_API_URL`: URL de NestJS con el prefijo `/api`.
+
+El middleware mantiene la sesión de Supabase en cookies y protege `/`. El cliente
+`apiFetch` obtiene el `access_token` vigente y lo envía como
+`Authorization: Bearer <token>` a los endpoints protegidos.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
