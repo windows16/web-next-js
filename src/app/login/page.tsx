@@ -104,7 +104,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-xs text-muted-foreground">
-            Tus credenciales se gestionan de forma segura mediante la API.
+            Tus credenciales se gestionan de forma segura mediante Supabase.
           </p>
         </CardContent>
       </Card>
