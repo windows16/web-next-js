@@ -1,6 +1,5 @@
 "use client";
 
-import type { Session, User } from "@supabase/supabase-js";
 import {
   createContext,
   useCallback,
@@ -10,10 +9,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase";
+import {
+  clearAccessToken,
+  getAccessToken,
+  type AuthenticatedUser,
+  type LoginResponse,
+  setAccessToken,
+} from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
 
 type AuthContextValue = {
-  user: User | null;
+  user: AuthenticatedUser | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -23,78 +29,80 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = useMemo(() =>
-    typeof window === "undefined" ? null : createSupabaseBrowserClient(),
-    [],
-  );
 
   useEffect(() => {
-    if (!supabase) {
-      return;
-    }
-
     let isMounted = true;
 
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        console.error("No se pudo recuperar la sesión de Supabase.", error);
+    void Promise.resolve().then(() => {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
       }
-      if (isMounted) {
-        setSession(data.session);
-        setIsLoading(false);
-      }
-    });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
+      return apiFetch<AuthenticatedUser>("/v1/auth/me")
+        .then((authenticatedUser) => {
+          if (isMounted) {
+            setToken(accessToken);
+            setUser(authenticatedUser);
+          }
+        })
+        .catch(() => {
+          clearAccessToken();
+          if (isMounted) {
+            setToken(null);
+            setUser(null);
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
     });
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    if (!supabase) {
-      throw new Error("La autenticación no está disponible en este momento.");
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const response = await apiFetch<LoginResponse>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
     });
-    if (error) {
-      throw new Error(error.message);
-    }
-    setSession(data.session);
-  }, [supabase]);
+
+    setAccessToken(response.access_token, response.expires_in);
+    setToken(response.access_token);
+    setUser(response.user);
+  }, []);
 
   const logout = useCallback(async () => {
-    if (!supabase) {
-      throw new Error("La autenticación no está disponible en este momento.");
+    try {
+      await apiFetch<{ mensaje: string }>("/v1/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      clearAccessToken();
+      setToken(null);
+      setUser(null);
     }
-
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      throw new Error(error.message);
-    }
-    setSession(null);
-  }, [supabase]);
+  }, []);
 
   const value = useMemo(
     () => ({
-      user: session?.user ?? null,
-      token: session?.access_token ?? null,
+      user,
+      token,
       login,
       logout,
       isLoading,
     }),
-    [isLoading, login, logout, session],
+    [isLoading, login, logout, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
